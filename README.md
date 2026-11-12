@@ -1,38 +1,41 @@
 # Site Authenticator
 
-A self-hosted TypeScript authentication module for independent websites. Each installation has its own accounts and SQLite database. One account signs in with a login username and can create several separately named public profiles.
+Site Authenticator is a self-hosted TypeScript module that adds registration, sign-in, account settings, and user-created profiles to a Fastify website. Each site installs its own copy with a separate SQLite database. One account has an email and login username, and its owner can create and switch between multiple public profiles. The module includes ready-made pages whose CSS a site administrator can customize.
 
-## Current scope
+## Instructions for Build and Use
 
-- Register with a login username, email, password, and first profile name.
-- Verify email, sign in and out, reset a password, and change the login username, email, or password.
-- Create, rename, delete, and switch between profiles without another login.
-- Use ready-made pages under `/auth`; add a same-origin stylesheet to change their appearance.
-- Read `request.authSession` in later Fastify routes to identify the account and active profile.
+Steps to build and/or run the software:
 
-Usernames are case-insensitive for uniqueness and limited to 32 visible Unicode grapheme clusters. Control characters, misleading invisible formatting, and leading or trailing whitespace are rejected. Email is an account property, shared by all its profiles. Email login, MFA, social login, and PostgreSQL are outside this first version.
+1. Install Node.js 22 or newer and npm. From this project directory, run `npm install`.
+2. Copy the example settings with `Copy-Item .env.example .env` in PowerShell. The defaults run locally; set the SMTP values in `.env` to send real email.
+3. Run `npm run dev`, then open `http://localhost:3000/auth/register`. This command builds the TypeScript and starts the example server. Use `npm test` to build and run the integration tests.
 
-The module compares the whole email address without regard to letter case and does not apply provider-specific rewrites such as removing dots. Profile public usernames are unique within one installation; login usernames have their own uniqueness scope.
+Instructions for using the software:
 
-## Run the example host
+1. Register with a login username, email, password, and first profile name. Passwords must contain at least 15 Unicode code points. Usernames are case-insensitive and limited to 32 visible Unicode characters.
+2. Open the verification link sent by email and select **Confirm**. If SMTP is not configured in local development, find the link in the server terminal. Sign in to reach the configured confirmation destination, `/auth/profile` by default.
+3. On the profile page, create, rename, delete, or switch profiles. Change your login username, email, or password from its separate account-settings form. Enter your current password only for the change you submit. Email changes require confirmation at the new address.
 
-Node.js 22 or newer is required. The example uses Node.js 24.
+### Site configuration
 
-```powershell
-npm install
-Copy-Item .env.example .env
-npm run dev
-```
+The example server loads `.env` if present. A site administrator sets these values for the installation; individual account holders do not configure an email server.
 
-Open `http://localhost:3000/auth/register`. With no SMTP configuration and outside production mode, verification and reset emails are printed to the terminal. Open the link printed there. The example host also exposes `/example-private` to show how an authenticated route gets the current account and profile IDs.
+| Setting | Purpose |
+| --- | --- |
+| `AUTH_DATABASE_PATH` | SQLite database location; default `./data/auth.sqlite`. |
+| `AUTH_PUBLIC_URL` | Public site origin used in email links and same-origin checks; default `http://localhost:3000`. |
+| `AUTH_SECURE_COOKIES` | Use `false` only for local HTTP development. Production requires HTTPS. |
+| `AUTH_SMTP_HOST`, `AUTH_SMTP_PORT`, `AUTH_SMTP_SECURE` | The site's SMTP relay. Port 587 with `false` requires STARTTLS; port 465 commonly uses `true` for implicit TLS. |
+| `AUTH_SMTP_USER`, `AUTH_SMTP_PASSWORD`, `AUTH_EMAIL_FROM` | SMTP credentials and sender address. Production mode requires a host and sender. |
+| `AUTH_CONFIRMATION_REDIRECT_PATH` | Same-origin page reached after email confirmation and, if needed, sign-in; default `/auth/profile`. Queries and fragments are not accepted. |
+| `AUTH_CUSTOM_CSS_FILE` | Local stylesheet that the example server serves at `/auth/site.css`. |
+| `AUTH_CUSTOM_CSS_URL` | Same-origin stylesheet path provided by a host website. The CSS file takes precedence in the example server. |
 
-After selecting **Confirm** on a verification or email-change page, the user is sent to the administrator's confirmation destination. The example destination is `/auth/profile`. A signed-out user signs in first and then reaches that page. Opening the email link alone does not change account state or sign the user in.
+The built-in CSS defines `--auth-bg`, `--auth-surface`, `--auth-ink`, `--auth-accent`, `--auth-border`, and `--auth-muted`. A custom stylesheet loads after the default one; for example, `:root { --auth-accent: #6b3ea8; }` changes the accent color.
 
-`npm run build` compiles the TypeScript; `npm test` builds and runs the integration tests. `npm start` runs an existing build.
+### Add the module to another Fastify site
 
-## Use in another Fastify website
-
-Build this repository with `npm run build`, then install it as a local package in another Node.js website (for example, `npm install ../Authenticator`). Register it before routes that read the session:
+Build this project with `npm run build`, then install it locally in the other Node.js website (for example, `npm install ../Authenticator`). Register the plugin before routes that need authentication:
 
 ```ts
 import fastify from 'fastify';
@@ -59,39 +62,31 @@ app.get('/my-posts', async (request, reply) => {
 });
 ```
 
-The host must use `activeProfileId`, not a profile ID supplied by the browser, when it reads or changes profile-specific data. Every profile belongs to exactly one account. To enable deletion, pass an `onProfileDelete(accountId, profileId)` callback that removes that profile's content from the host site. Without it, the built-in page hides Delete and the API returns 501. The callback runs before the authentication record is deleted. It should fail safely and be idempotent because host data and the authentication database may be separate. The example host passes a no-op callback because it stores no profile-specific content.
+The host site must use `request.authSession.activeProfileId` when accessing profile-specific data. To enable profile deletion, provide an `onProfileDelete(accountId, profileId)` callback that removes the host site's associated data. Without it, the built-in page hides Delete and the API returns 501. The example server supplies an empty callback because it has no profile-specific site content.
 
-The package currently targets Fastify on Node.js. A different server framework needs an adapter. The SQLite access is isolated in the module so a PostgreSQL implementation can be added later; PostgreSQL is not yet supported.
+Run `npm run backup` to copy a live SQLite database. Startup and `npm run migrate` apply versioned migrations; when an existing database needs a migration, they create a backup first. Follow the [backup and restore instructions](docs/backups.md) before upgrades. A production site also needs HTTPS, working SMTP delivery, and correctly configured trusted proxy addresses if it uses forwarded client IPs for rate limits. Do not commit `.env`.
 
-## Configuration
+## Development Environment
 
-The example host loads `.env` if present. Library consumers pass equivalent values to `authPlugin`.
+To recreate the development environment, you need the following software and/or libraries with the specified versions:
 
-| Setting | Meaning |
-| --- | --- |
-| `AUTH_DATABASE_PATH` | Writable path to this site's SQLite database; default `./data/auth.sqlite`. |
-| `AUTH_PUBLIC_URL` | Public origin used in email links and same-origin checks; default `http://localhost:3000`. |
-| `AUTH_SECURE_COOKIES` | Set `true` behind HTTPS. The example permits `false` for local HTTP development. Library installations default to secure cookies. |
-| `AUTH_SMTP_HOST`, `AUTH_SMTP_PORT`, `AUTH_SMTP_SECURE` | This site's SMTP relay. Port 587 with `false` requires STARTTLS; port 465 commonly uses `true` for implicit TLS. |
-| `AUTH_SMTP_USER`, `AUTH_SMTP_PASSWORD`, `AUTH_EMAIL_FROM` | SMTP credentials and sender address. Production mode requires SMTP host and sender. |
-| `AUTH_CUSTOM_CSS_FILE` | Example host only: local CSS file served at `/auth/site.css`. |
-| `AUTH_CUSTOM_CSS_URL` | Same-origin path to a stylesheet served by the host site. The local CSS file takes precedence. |
-| `AUTH_CONFIRMATION_REDIRECT_PATH` | Page to reach after email verification or email-change confirmation and, if needed, sign-in. Default `/auth/profile`; must be a same-origin absolute path without a query or fragment. |
+* Node.js 24.11.0 and npm 11.6.2 were used locally; the package requires Node.js 22 or newer.
+* TypeScript 5.9.3 and Fastify 5.12.8 provide the language and web framework.
+* better-sqlite3 13.1.1 stores accounts and profiles; Argon2 0.45.2 hashes passwords; Nodemailer 10.5.0 sends email. The exact dependency versions are pinned in `package.json` and `package-lock.json`.
 
-The site administrator configures SMTP for the installation; individual account holders do not configure mail servers. Do not commit `.env`. For a deployed site, use HTTPS and a trusted reverse proxy; configure Fastify's trusted proxy addresses if it needs forwarded client IPs for rate limits. Do not blindly trust every forwarded address.
+## Useful Websites to Learn More
 
-The default stylesheet exposes `--auth-bg`, `--auth-surface`, `--auth-ink`, `--auth-accent`, `--auth-border`, and `--auth-muted`. For example, a site's CSS can include `:root { --auth-accent: #6b3ea8; }`. It loads after the built-in stylesheet. The CSS URL must begin with one `/` and stay on the same origin.
+I found these websites useful in developing this software:
 
-For the example host, set `AUTH_CUSTOM_CSS_FILE` to a CSS file path and the server will serve it at `/auth/site.css`. An integrating site can serve its own CSS path and pass that path as `customCssUrl`.
+* [Node.js introduction](https://nodejs.org/learn/getting-started/introduction-to-nodejs)
+* [Fastify TypeScript documentation](https://fastify.dev/docs/latest/Reference/TypeScript/)
+* [SQLite documentation](https://www.sqlite.org/docs.html)
+* [OWASP Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)
 
-## Database changes and backups
+## Future Work
 
-The current migration is versioned in the database module and recorded in `schema_migrations`. Startup and `npm run migrate` apply pending migrations. When an existing database needs migration, both paths first write a live backup: the CLI writes to `./backups`, and startup writes beside the database in a `backups` directory. Startup stops if that backup fails. See [backup and restore instructions](docs/backups.md) before deployment or upgrades.
+The following items I plan to fix, improve, and/or add to this project in the future:
 
-## Security behavior and limits
-
-Passwords use Argon2id and must contain at least 15 Unicode code points. Random session and action tokens are stored only as hashes. Sessions expire after 30 minutes idle or eight hours total; logout and password changes revoke them. Email verification, password reset, and email changes use expiring one-use links. Login, registration, and email-request routes have persistent rate limits. Built-in JSON forms require a matching `Origin` header and do not enable cross-origin access.
-
-Changing the login username, email, or password requires the current password again. These are separate forms: the user fills in only the password field for the change being submitted. Email-change confirmation and password changes end existing sessions.
-
-This is an initial implementation. Before exposing a site publicly, review the host's authorization rules, SMTP delivery, trusted proxy configuration, backup restores, and the full account recovery and abuse policy for that site. The module does not delete host-owned posts or other profile content on its own.
+* [ ] Alternate ways of logging in and signing up, such as through Google or Microsoft
+* [ ] Multi-factor Authentication
+* [ ] An adater for PostgreSQL
