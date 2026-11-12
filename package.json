@@ -1,0 +1,40 @@
+{
+  "name": "site-authenticator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "files": ["dist/src", "README.md", "docs/backups.md"],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "dev": "npm run build && node dist/src/server.js",
+    "start": "node dist/src/server.js",
+    "migrate": "npm run build && node dist/src/cli.js migrate",
+    "backup": "npm run build && node dist/src/cli.js backup",
+    "test": "npm run build && node --test --test-isolation=none dist/test/auth.test.js"
+  },
+  "dependencies": {
+    "argon2": "0.45.2",
+    "better-sqlite3": "13.1.1",
+    "fastify": "5.12.8",
+    "fastify-plugin": "6.0.1",
+    "nodemailer": "10.5.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "24.13.3",
+    "@types/nodemailer": "8.0.2",
+    "typescript": "5.9.3"
+  }
+}
